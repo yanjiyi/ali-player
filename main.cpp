@@ -39,20 +39,20 @@ static float videoVertices[] = {
 
 const char* vertexShaderSource = {
 	"#version 110\n"
-	"attribute vec3 vPos;\n"
-	"attribute vec2 vTexCoords;\n"
-	"varying vec2 fTexCoords;\n"
-	"void main() { \n"
-	" 	fTexCoords = vTexCoords;\n"
-	" 	gl_Position = vec4(vPos,1.0); }\n"
+		"attribute vec3 vPos;\n"
+		"attribute vec2 vTexCoords;\n"
+		"varying vec2 fTexCoords;\n"
+		"void main() { \n"
+		" 	fTexCoords = vTexCoords;\n"
+		" 	gl_Position = vec4(vPos,1.0); }\n"
 };
 
 const char* fragmentShaderSource = {
 	"#version 110\n"
-	"varying vec2 fTexCoords;\n"
-	"uniform sampler2D texture;\n"
-	"void main() {\n"
-	" 	gl_FragColor = texture2D(texture,fTexCoords); }\n"
+		"varying vec2 fTexCoords;\n"
+		"uniform sampler2D texture;\n"
+		"void main() {\n"
+		" 	gl_FragColor = texture2D(texture,fTexCoords); }\n"
 };
 
 GLuint BuildShader(const char* vSource,const char* fSource)
@@ -283,65 +283,83 @@ int main(int argc,char *argv[])
 		SDL_Event event;
 		bool run = true;
 
-		Uint64 start = SDL_GetPerformanceCounter();
-		while(run)
-		{
-			Uint64 end = SDL_GetPerformanceCounter();
-			float frametime = (end - start) / (float)SDL_GetPerformanceFrequency();
-
-			start = end;
-
-			while(SDL_PollEvent(&event))
-			{
-				if(event.type == SDL_QUIT)
-				{
-					run = false;
-					break;
-				}
-
-				if(event.window.event == SDL_WINDOWEVENT_RESIZED && event.window.windowID == SDL_GetWindowID(ptrWindow))
-				{
-					int width,height;
-					SDL_GetWindowSize(ptrWindow, &width, &height);
-					glViewport(0,0,width,height);
-				}
-			}
-
+		while(ret >= 0) {
 			if((ret = av_read_frame(ifmt_ctx,dec_pkt)) < 0)
 				break;
 
 			if(video_stream == dec_pkt->stream_index)
 			{
 				//Do Decode , Update Texture
+				AVFrame *frame = av_frame_alloc();
+				ret = avcodec_send_packet(decoder_ctx, dec_pkt);
+				if(ret < 0)
+				{
+					fprintf(stderr, "Error during decoding. Error code: %s\n", av_err2str(ret));
+					break;
+				}
+
+				while(ret >= 0)
+				{
+					if(!(frame = av_frame_alloc()))
+					{
+						printf("No Frame Memory!\n");
+						break;	
+					}
+
+					Uint64 start = SDL_GetPerformanceCounter();
+					while(run)
+					{
+						Uint64 end = SDL_GetPerformanceCounter();
+						float frametime = (end - start) / (float)SDL_GetPerformanceFrequency();
+
+						start = end;
+
+						while(SDL_PollEvent(&event))
+						{
+							if(event.type == SDL_QUIT)
+							{
+								run = false;
+								break;
+							}
+
+							if(event.window.event == SDL_WINDOWEVENT_RESIZED && event.window.windowID == SDL_GetWindowID(ptrWindow))
+							{
+								int width,height;
+								SDL_GetWindowSize(ptrWindow, &width, &height);
+								glViewport(0,0,width,height);
+							}
+						}
+
+						av_packet_unref(dec_pkt);
+
+						glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+						glClearColor(0.0f,0.0f,0.0f,1.0f);
+
+						glUseProgram(shader_program);
+
+						glActiveTexture(GL_TEXTURE0);
+						glBindTexture(GL_TEXTURE_2D, texture);
+						glBindBuffer(GL_ARRAY_BUFFER,vbo);
+
+						glDrawArrays(GL_TRIANGLES, 0, 6);
+
+						glBindBuffer(GL_ARRAY_BUFFER,0);
+						glBindTexture(GL_TEXTURE_2D,0);
+						glUseProgram(0);
+
+						SDL_GL_SwapWindow(ptrWindow);
+					}
+
+				}
 			}
+			glDeleteBuffers(1,&vbo);
+			glDeleteTextures(1,&texture);
+			glDeleteProgram(shader_program);
 
-			av_packet_unref(dec_pkt);
-
-			glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-			glClearColor(0.0f,0.0f,0.0f,1.0f);
-
-			glUseProgram(shader_program);
-
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, texture);
-			glBindBuffer(GL_ARRAY_BUFFER,vbo);
-
-			glDrawArrays(GL_TRIANGLES, 0, 6);
-
-			glBindBuffer(GL_ARRAY_BUFFER,0);
-			glBindTexture(GL_TEXTURE_2D,0);
-			glUseProgram(0);
-
-			SDL_GL_SwapWindow(ptrWindow);
+			SDL_GL_DeleteContext(glContext);
+			SDL_DestroyWindow(ptrWindow);
+			SDL_Quit();
 		}
-
-		glDeleteBuffers(1,&vbo);
-		glDeleteTextures(1,&texture);
-		glDeleteProgram(shader_program);
-
-		SDL_GL_DeleteContext(glContext);
-		SDL_DestroyWindow(ptrWindow);
-		SDL_Quit();
 	}while(0);
 
 	avformat_close_input(&ifmt_ctx);
