@@ -283,7 +283,7 @@ int main(int argc,char *argv[])
 		SDL_Event event;
 		bool run = true;
 
-		while(ret >= 0) {
+		while(ret >= 0 && run) {
 			if((ret = av_read_frame(ifmt_ctx,dec_pkt)) < 0)
 				break;
 
@@ -298,6 +298,7 @@ int main(int argc,char *argv[])
 					break;
 				}
 
+				Uint64 start = SDL_GetPerformanceCounter();
 				while(ret >= 0)
 				{
 					if(!(frame = av_frame_alloc()))
@@ -306,50 +307,46 @@ int main(int argc,char *argv[])
 						break;	
 					}
 
-					Uint64 start = SDL_GetPerformanceCounter();
-					while(run)
+
+					Uint64 end = SDL_GetPerformanceCounter();
+					float frametime = (end - start) / (float)SDL_GetPerformanceFrequency();
+
+					start = end;
+
+					while(SDL_PollEvent(&event))
 					{
-						Uint64 end = SDL_GetPerformanceCounter();
-						float frametime = (end - start) / (float)SDL_GetPerformanceFrequency();
-
-						start = end;
-
-						while(SDL_PollEvent(&event))
+						if(event.type == SDL_QUIT)
 						{
-							if(event.type == SDL_QUIT)
-							{
-								run = false;
-								break;
-							}
-
-							if(event.window.event == SDL_WINDOWEVENT_RESIZED && event.window.windowID == SDL_GetWindowID(ptrWindow))
-							{
-								int width,height;
-								SDL_GetWindowSize(ptrWindow, &width, &height);
-								glViewport(0,0,width,height);
-							}
+							run = false;
+							break;
 						}
 
-						av_packet_unref(dec_pkt);
-
-						glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-						glClearColor(0.0f,0.0f,0.0f,1.0f);
-
-						glUseProgram(shader_program);
-
-						glActiveTexture(GL_TEXTURE0);
-						glBindTexture(GL_TEXTURE_2D, texture);
-						glBindBuffer(GL_ARRAY_BUFFER,vbo);
-
-						glDrawArrays(GL_TRIANGLES, 0, 6);
-
-						glBindBuffer(GL_ARRAY_BUFFER,0);
-						glBindTexture(GL_TEXTURE_2D,0);
-						glUseProgram(0);
-
-						SDL_GL_SwapWindow(ptrWindow);
+						if(event.window.event == SDL_WINDOWEVENT_RESIZED && event.window.windowID == SDL_GetWindowID(ptrWindow))
+						{
+							int width,height;
+							SDL_GetWindowSize(ptrWindow, &width, &height);
+							glViewport(0,0,width,height);
+						}
 					}
 
+					av_packet_unref(dec_pkt);
+
+					glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+					glClearColor(0.0f,0.0f,0.0f,1.0f);
+
+					glUseProgram(shader_program);
+
+					glActiveTexture(GL_TEXTURE0);
+					glBindTexture(GL_TEXTURE_2D, texture);
+					glBindBuffer(GL_ARRAY_BUFFER,vbo);
+
+					glDrawArrays(GL_TRIANGLES, 0, 6);
+
+					glBindBuffer(GL_ARRAY_BUFFER,0);
+					glBindTexture(GL_TEXTURE_2D,0);
+					glUseProgram(0);
+
+					SDL_GL_SwapWindow(ptrWindow);
 				}
 			}
 			glDeleteBuffers(1,&vbo);
